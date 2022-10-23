@@ -1,15 +1,44 @@
 package tls
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/roadrunner-server/http/v3/attributes"
+	"go.uber.org/zap"
 )
 
-func SetTlsAttributes(next http.Handler) http.Handler {
+const PluginName = "tls-attributes"
+
+type Plugin struct{}
+
+// to declare plugin
+func (p *Plugin) Init() error {
+	return nil
+}
+
+func (p *Plugin) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = attributes.Init(r)
-		attributes.Set(r, "davekey", "gebvalue")
+		attributes.Set(r, "davekey", "gebler")
+		attributes.Set(r, "HTTPS", false)
+		if r.TLS != nil {
+			attributes.Set(r, "HTTPS", true)
+			// Get JSON string representation of the certificate
+			cert, err := json.Marshal(r.TLS.PeerCertificates[0])
+			if err != nil {
+				// log the error via zap
+				zap.L().Error("failed to marshal certificate", zap.Error(err))
+			} else {
+				attributes.Set(r, "certificate", string(cert))
+				attributes.Set(r, "certificate_subject", r.TLS.PeerCertificates[0].Subject.String())
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// Middleware/plugin name.
+func (p *Plugin) Name() string {
+	return PluginName
 }
